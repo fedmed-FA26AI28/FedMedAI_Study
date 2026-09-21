@@ -1,0 +1,63 @@
+﻿# FedMedAI v2: lightweight 2D baseline and explicit evaluation protocol.
+federation:
+  num_clients: 3
+  num_rounds: 5
+  partition_type: iid
+  dirichlet_alpha: 0.3
+  seed: 42
+  min_train_samples: 10
+  min_val_samples: 1
+
+algorithm:
+  name: fedavg                 # fedavg | fedprox (candidate for ablation)
+  proximal_mu: 0.01            # Used only for FedProx; mu=0 recovers FedAvg.
+
+model:
+  name: resnet18               # Main model; custom_cnn is an optional alternative.
+  pretrained: false
+  # num_classes is inferred from the selected dataset.
+
+training:
+  batch_size: 32
+  local_epochs: 1
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  centralized_epochs: null     # Defaults to num_rounds * local_epochs.
+
+dataset:
+  name: BloodMNIST             # DermaMNIST supported for secondary evaluation.
+  image_size: 28
+  root: null                  # MedMNIST default cache.
+  download: true
+  max_train_samples: 500       # Per client, quick development configuration.
+  max_val_samples: 100         # Set both caps to null for full research runs.
+  max_test_samples: null       # Official test; used once after model selection.
+
+evaluation:
+  selection_metric: f1_macro   # Validation only: f1_macro | accuracy | loss.
+  target_accuracy: 0.8         # Validation convergence target; null disables it.
+  max_failure_cases: 100       # Bounded list of misclassified test sample IDs.
+
+runtime:
+  backend: flower             # flower (Ray) | sequential (debug only).
+  deterministic: true
+  torch_num_threads: 1
+  client_cpus: 1
+  client_gpus: 0.0             # Set explicitly for CUDA worker allocation.
+  ray_num_cpus: 1
+
+monitoring:
+  enabled: true
+  interval_seconds: 0.2
+  sensors: {}                 # Optional numeric files: power_watts, temperature_c,
+                              # gpu_utilization_percent -> {path: ..., scale: ...}.
+
+hardware:
+  scenario: pc_simulation
+  client_device_types: {}      # Recorded labels; this does not emulate edge devices.
+
+paths:
+  checkpoints_dir: checkpoints
+  results_dir: results
+  runs_dir: runs
+
