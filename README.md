@@ -1,8 +1,15 @@
 ﻿# FedMedAI — Federated Learning cho phân loại ảnh y tế 2D
 
-FedMedAI là hệ thống thực nghiệm dùng **ResNet-18 làm mô hình chính**, kết hợp PyTorch và Flower để so sánh centralized learning, FedAvg và FedProx trên MedMNIST. **BloodMNIST** là dataset chính; **DermaMNIST** dùng cho thực nghiệm bổ sung trên một miền ảnh khác.
+FedMedAI là hệ thống thực nghiệm dùng **ResNet-18 làm mô hình chính**, kết hợp PyTorch và Flower để so sánh centralized learning, FedAvg và FedProx trên MedMNIST. **BloodMNIST** là dataset chính; **DermaMNIST** là hướng mở rộng, chưa nằm trong ma trận kết quả hiện tại.
 
 Tập trung vào ảnh hưởng của phân bố dữ liệu, thuật toán, số lượng client và tài nguyên tính toán. README mô tả hành vi của code hiện tại, cách chạy và cách diễn giải kết quả. **ResNet-18 là mặc định trong config, model factory và smoke test; BloodCNN chỉ là tùy chọn ablation.**
+
+**Kết quả nghiên cứu hiện hành (2026-09-26):** toàn bộ BloodMNIST, ResNet-18,
+8 rounds, 3 clients, seed 2026, chỉ Dirichlet α=0.1/0.3/1.0. So sánh FedAvg cố định
+với FedProx và FedProx+FP16; đã hoàn tất 9 runs + 1 replay.
+[Báo cáo](research/non_iid_report.md) · [Communication](research/communication_report.md) · [STATUS](STATUS.md).
+Các bộ kết quả cũ có IID đã được xóa. Chức năng IID trong API/CLI và kiểm thử tổng hợp
+chỉ mô tả khả năng phần mềm, không thuộc nghiên cứu đang báo cáo.
 
 ## Mục lục
 
@@ -43,7 +50,7 @@ Hướng triển khai phần cứng trong kế hoạch là **5 Jetson Orin + 5 J
 | Model | ResNet-18 chính; BloodCNN tùy chọn |
 | Training | Centralized, FedAvg, FedProx với AdamW |
 | Dữ liệu | MedMNIST single-label 2D, IID/Dirichlet, metadata tái lập |
-| Backend | Flower/Ray virtual clients và sequential debug backend |
+| Backend | Sequential cho nghiên cứu hiện hành; Flower/Ray virtual clients tùy chọn |
 | Evaluation | Validation theo round/epoch; test cuối run bằng best validation checkpoint |
 | Reporting | CSV, JSON, JSONL, checkpoints, TensorBoard |
 | Monitoring | CPU/RAM, CUDA allocator và numeric sensor files tùy chọn |
@@ -274,7 +281,7 @@ Với mỗi lớp, lấy tỷ lệ phân bổ vào K client từ Dirichlet(alpha
 
 `max_train_samples`, `max_val_samples` áp dụng **mỗi client**; `max_test_samples` áp dụng cho global test. `null` là không giới hạn; 0 không phải cách bỏ giới hạn.
 
-Config chính với 3 client dùng tối đa 1.500 train và 300 validation samples; có thể ít hơn nếu một client có ít mẫu hơn cap. Metadata lưu cả allocated counts và counts thực sử dụng.
+Config chính không giới hạn số mẫu: dùng toàn bộ 11.959 train và 1.712 validation images của BloodMNIST. Metadata lưu allocated counts và counts thực sử dụng; caps vẫn có thể được khai báo cho smoke checks riêng.
 
 Sample ID là **zero-based index trong official split**, không phải ID bệnh nhân. Train ID 10 và test ID 10 thuộc hai namespace khác nhau.
 
@@ -312,7 +319,7 @@ python -c "import torch; print('torch:', torch.__version__); print('CUDA:', torc
 
 ### Smoke test
 
-Config chính bật download; smoke config tắt download. Nếu chưa có BloodMNIST trong cache mặc định, tải trước:
+Config chính và smoke config đều tắt download. Nếu chưa có BloodMNIST trong cache mặc định, tải trước:
 
 ```bash
 python -c "import medmnist; medmnist.BloodMNIST(split='train', download=True)"
@@ -336,29 +343,22 @@ python scripts/run_centralized.py --config configs/smoke.yaml
 <a id="thuc-nghiem"></a>
 ## 9. Chạy thực nghiệm và CLI
 
-### Các lệnh thường dùng
+### Các lệnh cho nghiên cứu hiện hành
 
-```bash
-# Centralized baseline
-python scripts/run_centralized.py
+```powershell
+# Xem/tạo lại báo cáo từ kết quả đã hoàn tất, không training lại
+python -B scripts/report_communication_study.py results/non_iid_study/suite_20260926T103613Z
 
-# FedAvg với IID
-python scripts/run_iid.py
+# Chỉ chạy khi muốn tạo một ma trận mới: 3 alpha × 3 nhánh và replay
+python -B scripts/run_non_iid_study.py
 
-# FedAvg qua cả ba alpha 0.1, 0.3, 1.0
-python scripts/run_non_iid.py
-
-# Một alpha với FedProx
-python scripts/run_non_iid.py 0.1 --algorithm fedprox --seed 42
-
-# CLI chung: số client, rounds và seed
-python scripts/run_experiment.py --partition dirichlet --alpha 0.3 --algorithm fedavg --num-clients 5 --rounds 20 --seed 123
-
-# Centralized với cùng alpha và seed
-python scripts/run_experiment.py --mode centralized --partition dirichlet --alpha 0.3 --seed 123
+# Một run riêng để phát triển, không thay thế bộ kết quả đã kiểm chứng
+python scripts/run_experiment.py --config configs/non_iid_study.yaml --partition dirichlet --alpha 0.3 --algorithm fedavg
 ```
 
-Centralized vẫn lấy số client để tạo partition từ YAML. Để đối chiếu đúng với run 5 client/20 rounds phía trên, đặt `federation.num_clients: 5`, `federation.num_rounds: 20` trong config dùng chung, đồng thời giữ caps và các training parameters nhất quán.
+Các lựa chọn IID, centralized, seed/client count khác vẫn được API hỗ trợ, nhưng
+không thuộc ma trận nghiên cứu hiện tại. Với ResNet-18 28×28 và dữ liệu đầy đủ,
+đổi seed/batch size cần kiểm tra singleton BatchNorm batches trước khi training.
 
 ### CLI chung
 
@@ -419,10 +419,10 @@ Nguồn chính: [configs/config.yaml](configs/config.yaml). Thứ tự áp dụn
 | Key | Mặc định trong config chính | Ý nghĩa |
 |---|---|---|
 | `federation.num_clients` | 3 | Số partition/client |
-| `federation.num_rounds` | 5 | FL rounds |
-| `federation.partition_type` | `iid` | IID hoặc Dirichlet |
+| `federation.num_rounds` | 8 | FL rounds |
+| `federation.partition_type` | `dirichlet` | IID hoặc Dirichlet |
 | `federation.dirichlet_alpha` | 0.3 | Dirichlet concentration |
-| `federation.seed` | 42 | Experiment seed |
+| `federation.seed` | 2026 | Experiment seed |
 | `federation.min_train_samples` | 10 | Min train/client, trước cap, khi phân bổ Dirichlet |
 | `federation.min_val_samples` | 1 | Min validation/client, trước cap, khi phân bổ Dirichlet |
 | `algorithm.name` | `fedavg` | FedAvg hoặc FedProx |
@@ -443,9 +443,9 @@ Nguồn chính: [configs/config.yaml](configs/config.yaml). Thứ tự áp dụn
 | `dataset.name` | `BloodMNIST` | Dataset class |
 | `dataset.image_size` | 28 | Kích thước sau resize |
 | `dataset.root` | `null` | Cache mặc định |
-| `dataset.download` | `true` | Cho phép tải khi cần |
-| `dataset.max_train_samples` | 500 | Cap mỗi client |
-| `dataset.max_val_samples` | 100 | Cap mỗi client |
+| `dataset.download` | `false` | Dùng dataset đã cache; bật khi cần tải |
+| `dataset.max_train_samples` | `null` | Dùng toàn bộ train split |
+| `dataset.max_val_samples` | `null` | Dùng toàn bộ validation split |
 | `dataset.max_test_samples` | `null` | Cap toàn test; mặc định dùng full split |
 | `evaluation.selection_metric` | `f1_macro` | Validation `f1_macro`, `accuracy` hoặc `loss` |
 | `evaluation.target_accuracy` | 0.8 | Target validation accuracy; `null` tắt |
@@ -455,9 +455,9 @@ Nguồn chính: [configs/config.yaml](configs/config.yaml). Thứ tự áp dụn
 
 | Key | Mặc định | Ý nghĩa |
 |---|---|---|
-| `runtime.backend` | `flower` | Flower/Ray hoặc sequential |
+| `runtime.backend` | `sequential` | Same-host simulation; Flower/Ray là lựa chọn khác |
 | `runtime.deterministic` | `true` | Deterministic Torch operations |
-| `runtime.torch_num_threads` | 1 | Torch CPU threads/process |
+| `runtime.torch_num_threads` | 8 | Torch CPU threads/process |
 | `runtime.client_cpus` | 1 | Ray CPU allocation/client |
 | `runtime.client_gpus` | 0.0 | Ray GPU allocation/client, từ 0 đến 1 |
 | `runtime.ray_num_cpus` | 1 | Tổng CPU resources công bố cho Ray |
@@ -466,9 +466,9 @@ Nguồn chính: [configs/config.yaml](configs/config.yaml). Thứ tự áp dụn
 | `monitoring.sensors` | `{}` | Numeric sensor files tùy chọn |
 | `hardware.scenario` | `pc_simulation` | Nhãn kịch bản |
 | `hardware.client_device_types` | `{}` | Client ID → nhãn thiết bị |
-| `paths.results_dir` | `results` | Root báo cáo |
-| `paths.checkpoints_dir` | `checkpoints` | Root checkpoints |
-| `paths.runs_dir` | `runs` | Root TensorBoard |
+| `paths.results_dir` | `results/non_iid_study` | Root báo cáo |
+| `paths.checkpoints_dir` | `checkpoints/non_iid_study` | Root checkpoints |
+| `paths.runs_dir` | `runs/non_iid_study` | Root TensorBoard |
 
 Với 1 Ray CPU và mỗi client cần 1 CPU, client có thể được lập lịch lần lượt; 3 client không mặc định đồng nghĩa 3 jobs song song. Tăng concurrency bằng runtime resources phù hợp và ghi lại trong manifest.
 
@@ -788,32 +788,25 @@ Python, NumPy, Torch và DataLoader được seed. Local fit dùng seed suy ra t
 
 Dùng cùng code/environment, effective config và dataset, rồi đối chiếu partition hash/IDs. Hiện chưa có CLI replay trực tiếp từ `partition_metadata.json`.
 
-### Ma trận thực nghiệm
+### Ma trận thực nghiệm hiện hành
 
-| Câu hỏi | Biến thay đổi | Các điều kiện cần giữ nhất quán |
-|---|---|---|
-| Non-IID | IID; α=1.0/0.3/0.1 | Model, dataset, client count, training, backend |
-| Thuật toán | FedAvg/FedProx; các mu | Partition/IDs, seed, rounds, local epochs, optimizer |
-| Client count | 3/5/10 | Model/protocol; ghi rõ tổng mẫu thực dùng |
-| Độ ổn định | Nhiều seeds | Các hyperparameters còn lại |
-| Dataset phụ | BloodMNIST/DermaMNIST | Protocol nhất quán; classifier đổi theo số lớp |
-| Hardware, sau khi deploy | Orin/Nano/mixed | IDs, model, batch size, local epochs, algorithm |
+| Thành phần | Cấu hình cố định / điều kiện |
+|---|---|
+| Dữ liệu | BloodMNIST đầy đủ: 11,959 train / 1,712 val / 3,421 test |
+| Model | ResNet-18, không pretrained, 28×28 |
+| Non-IID | Dirichlet α=0.1 / 0.3 / 1.0; không IID |
+| Baseline | FedAvg, uplink không nén, μ hiệu dụng=0 |
+| Đề xuất | FedProx μ=0.01; FedProx μ=0.01 + FP16 uplink |
+| Training | 3 clients đầy đủ, 8 rounds, 1 epoch, AdamW lr=0.0001, batch=32 |
+| Tái lập | Một seed chung 2026, deterministic CPU, 8 threads |
+| Lựa chọn checkpoint | Pooled validation macro-F1; test cuối run |
 
-Caps áp dụng theo client nên tăng số client có thể làm tăng tổng dữ liệu. Nếu chỉ muốn đo ảnh hưởng client count, cần kiểm soát tổng sample count và mô tả điều kiện so sánh.
-
-Ví dụ chạy nhiều seeds bằng PowerShell:
-
-```powershell
-foreach ($seed in 42, 123, 2024) {
-    python scripts/run_experiment.py --partition dirichlet --alpha 0.3 --algorithm fedavg --seed $seed
-}
-```
-
-Khi báo cáo nhiều seeds, tổng hợp các run cùng điều kiện và ghi mean/std cùng số seeds. Không thay `rounds_to_target: null` bằng 0 nếu run chưa đạt target; báo thêm số run đạt target.
-
-### Artifact lịch sử
-
-Run cũ không có `schema_version: 2` có thể chọn best checkpoint trên test; cần chạy lại để so sánh dưới protocol mới. Artifact BloodCNN cũ vẫn mô tả BloodCNN dù mặc định hiện tại là ResNet-18. Xác định model từ manifest/checkpoint thay vì suy đoán theo config hiện tại.
+Dùng `python -B scripts/report_non_iid_study.py results/non_iid_study/suite_20260926T103613Z`
+để đọc lại kết quả đã hoàn tất. Chỉ chạy `scripts/run_non_iid_study.py` khi muốn
+training một suite mới; runner dùng khóa baseline và không sửa baseline theo test.
+Ba α là các điều kiện, không phải seed replicates; không báo mean±SD qua α.
+Client sampling, nhiều seeds/clients, DermaMNIST, centralized và Jetson là hướng mở rộng.
+`rounds_to_target: null` nghĩa là chưa đạt target, không thay bằng 0.
 
 <a id="kiem-thu"></a>
 ## 15. Kiểm thử và xử lý lỗi
@@ -824,7 +817,7 @@ Run cũ không có `schema_version: 2` có thể chọn best checkpoint trên te
 python -m unittest discover -s tests -v
 ```
 
-Bộ kiểm thử hiện có 13 tests, dùng dữ liệu tổng hợp và temporary directories, không cần download dataset:
+Bộ kiểm thử dùng dữ liệu tổng hợp và temporary directories, không cần download dataset:
 
 - Classification metrics, lớp vắng mặt, fairness và straggler.
 - Failure sample IDs và energy integration khi có khoảng thiếu mẫu.
@@ -833,6 +826,7 @@ Bộ kiểm thử hiện có 13 tests, dùng dữ liệu tổng hợp và tempor
 - Pipeline sequential, artifact schema, tính tái lập.
 - Centralized dùng cùng partition; test chỉ được nạp cuối run.
 - Best checkpoint khi accuracy=0, failed run và config không hợp lệ.
+- FP16/INT8 upload codecs, serialized byte accounting, và paired-study integrity.
 
 Tests này không thay thế kiểm tra network/CUDA/sensors trên thiết bị thật. Smoke BloodMNIST kiểm tra thêm data loader với dữ liệu thật; Flower/Ray cần được kiểm tra riêng bằng lệnh ở phần chạy nhanh.
 
@@ -861,7 +855,7 @@ DataLoader hiện dùng `drop_last=False`; không tự bỏ singleton batch đ�
 Các bước tiếp theo theo định hướng v2:
 
 1. Hoàn thiện lập luận chọn architecture và thuật toán từ literature review.
-2. Chạy centralized/FedAvg với ResNet-18 trên dữ liệu đầy đủ, rồi khảo sát FedProx.
+2. Đã hoàn tất FedAvg/FedProx/FedProx+FP16 với ResNet-18 trên BloodMNIST đầy đủ; centralized là hướng mở rộng.
 3. Bổ sung deployment/transport cho client Jetson Orin, sau đó Jetson Nano.
 4. Đo Orin-only, Nano-only và mixed 5 Orin + 5 Nano với experimental controls.
 5. Xác minh sensor units, power rails, communication time và energy coverage.
@@ -879,3 +873,40 @@ Tài liệu liên quan:
 - [Li et al. — FedProx](https://arxiv.org/abs/1812.06127).
 - [Flower FedAvg strategy API](https://flower.ai/docs/framework/main/en/ref-api/flwr.server.strategy.FedAvg.html).
 
+## Communication research và thực nghiệm mới
+
+`communication.uplink_codec` hỗ trợ `none`, `fp16`, `int8` ở mức API. Ma trận hiện
+hành chỉ dùng `none` và `fp16`; không có kết quả INT8 trong nghiên cứu mới.
+FedAvg không nén là đối chứng cố định. FedProx dùng proximal objective μ=0.01;
+FP16 chỉ giảm model uploads, còn training/aggregation/downloads giữ model dtype.
+
+| α | Δmacro-F1 FedProx (pp) | Δmacro-F1 FedProx+FP16 (pp) | Tiêu chí truyền thông + chất lượng của FedProx+FP16 |
+|---:|---:|---:|---|
+| 0.1 | -3.127 | -2.214 | Không đạt |
+| 0.3 | -1.401 | -0.423 | Đạt |
+| 1.0 | +1.176 | +0.655 | Đạt |
+
+Các delta so với FedAvg cùng α. FP16 giảm 49.982% upload và 16.661% tổng serialized
+model payload ở cả ba α. Tiết kiệm bytes thuộc codec FP16; FedProx không nén không
+giảm payload. Không kết luận cải thiện nhất quán trên cả ba mức non-IID.
+Payload gồm tensor headers và fit/evaluation model transfers, không gồm RPC,
+telemetry, bảo mật hoặc retries; không suy ra tốc độ mạng hay năng lượng.
+
+[Báo cáo đầy đủ](research/non_iid_report.md) · [Communication report](research/communication_report.md) ·
+[CSV](research/communication_runs.csv) · [Biểu đồ](research/communication_tradeoff.png) ·
+[Protocol](research/non_iid_protocol.md) · [Khóa baseline](research/non_iid_baseline.lock.json).
+
+```powershell
+# Tạo lại cả hai báo cáo từ suite đã hoàn tất, không training lại
+python -B scripts/report_communication_study.py results/non_iid_study/suite_20260926T103613Z
+# Tương đương:
+python -B scripts/report_non_iid_study.py results/non_iid_study/suite_20260926T103613Z
+# Chỉ khi chủ động muốn chạy một ma trận mới:
+python -B -u scripts/run_non_iid_study.py
+```
+
+`run_communication_study.py` hiện là tên tương thích cho runner non-IID mới;
+không còn tạo ma trận IID/BloodCNN. `configs/config.yaml`, `communication_study.yaml`
+và `non_iid_study.yaml` resolve về cùng baseline hiện tại. `smoke.yaml` chỉ dành
+cho kiểm tra pipeline bằng tập con. Các artifacts của nghiên cứu mới giữ nguyên
+đường dẫn, IDs, partition hashes, checkpoint và immutable execution snapshots.

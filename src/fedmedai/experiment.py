@@ -16,6 +16,7 @@ import torch
 import yaml
 
 from fedmedai.dataset import dataset_info
+from fedmedai.communication import validate_codec
 
 SCHEMA_VERSION = 2
 MODEL_METRICS = ("loss", "accuracy", "precision_macro", "recall_macro", "f1_macro",
@@ -25,7 +26,7 @@ RESOURCE_FIELDS = (
     "gpu_utilization_percent_mean", "gpu_memory_allocated_bytes_peak", "temperature_c_max",
     "power_watts_mean", "energy_joules_observed", "energy_observed_seconds", "resource_sample_count")
 ROUND_FIELDS = (
-    "schema_version", "run_id", "round", "split", "algorithm", "fit_clients", "fit_failures",
+    "schema_version", "run_id", "round", "split", "algorithm", "uplink_codec", "fit_clients", "fit_failures",
     "evaluate_clients", "evaluate_failures", "train_samples", "val_samples",
     "client_train_loss", "client_train_accuracy",
     *("global_val_" + key for key in MODEL_METRICS),
@@ -34,7 +35,7 @@ ROUND_FIELDS = (
     "mean_client_f1_macro", "worst_client_f1_macro",
     "slowest_client_train_seconds", "median_client_train_seconds",
     "straggler_overhead_seconds", "estimated_wait_seconds_sum",
-    "client_train_seconds_sum", "fit_phase_seconds", "aggregation_seconds",
+    "client_train_seconds_sum", "fit_phase_seconds", "aggregation_seconds", "uplink_decode_seconds",
     "global_validation_seconds", "round_latency_seconds", "elapsed_training_seconds",
     "fit_download_model_bytes", "fit_upload_model_bytes", "evaluate_download_model_bytes",
     "round_model_payload_bytes", "cumulative_model_payload_bytes",
@@ -42,7 +43,7 @@ ROUND_FIELDS = (
 )
 CLIENT_FIELDS = (
     "schema_version", "run_id", "round", "phase", "split", "client_id", "device_type",
-    "hostname", "device", "num_samples", "local_epochs", "proximal_mu",
+    "hostname", "device", "num_samples", "local_epochs", "proximal_mu", "uplink_codec", "uplink_encode_seconds",
     "train_loss", "train_accuracy", *MODEL_METRICS, "duration_seconds",
     "upload_seconds", "download_seconds", "waiting_seconds", *RESOURCE_FIELDS,
 )
@@ -74,6 +75,7 @@ def load_config(path, overrides=None):
                        "dirichlet_alpha": 0.3, "seed": 42, "min_train_samples": 10,
                        "min_val_samples": 1},
         "algorithm": {"name": "fedavg", "proximal_mu": 0.01},
+        "communication": {"uplink_codec": "none"},
         "model": {"name": "resnet18", "pretrained": False},
         "training": {"batch_size": 32, "local_epochs": 1, "learning_rate": 1e-4,
                      "weight_decay": 0.01, "centralized_epochs": None},
@@ -98,6 +100,7 @@ def load_config(path, overrides=None):
         raise ValueError("partition_type must be iid or dirichlet")
     if config["algorithm"]["name"] not in ("fedavg", "fedprox"):
         raise ValueError("algorithm.name must be fedavg or fedprox")
+    validate_codec(config["communication"]["uplink_codec"])
     if config["algorithm"]["proximal_mu"] < 0:
         raise ValueError("proximal_mu must be nonnegative")
     if not isinstance(fed["seed"], int) or not 0 <= fed["seed"] < 2 ** 32:
@@ -185,6 +188,7 @@ class RunArtifacts:
         self.manifest = {
             "schema_version": SCHEMA_VERSION, "run_id": self.run_id, "status": "running",
             "started_at_utc": utc_now(), "mode": mode, "config": config,
+            "uplink_codec": config["communication"]["uplink_codec"] if mode == "federated" else "none",
             "environment": {"python": platform.python_version(), "platform": platform.platform(),
                             "hostname": platform.node(), "cuda_available": torch.cuda.is_available(),
                             "torch_cuda_version": torch.version.cuda, "packages": versions},
@@ -194,7 +198,7 @@ class RunArtifacts:
                                "checkpoints": str(self.checkpoints.resolve()),
                                "tensorboard": str(self.runs.resolve())},
             "measurement_notes": {
-                "communication": "Serialized model tensors only; includes evaluation downloads; excludes RPC headers, metrics, retries. Simulation estimate, not network capture.",
+                "communication": "Serialized model tensors and codec scales; includes evaluation downloads; excludes RPC headers, metrics, retries. Simulation payload, not network capture.",
                 "latency": "Wall time including fit, aggregation, global validation and client validation; simulation includes scheduling.",
                 "straggler": "Local compute max-minus-median and estimated wait; not measured transport waiting.",
                 "energy": "Observed client training windows only; missing sensors=null. Shared-host simulation energy must not be summed as fleet energy.",

@@ -1,9 +1,11 @@
 ﻿"""Flower clients share training/evaluation and emit versioned JSON telemetry."""
 
 import json
+import time
 
 import flwr as fl
 
+from fedmedai.communication import encode_uplink, validate_codec
 from fedmedai.evaluate import evaluate_classification
 from fedmedai.experiment import seed_everything
 from fedmedai.model import get_device, get_weights, set_weights
@@ -39,6 +41,7 @@ class FedMedClient(fl.client.NumPyClient):
                 "upload_seconds": None, "download_seconds": None, "waiting_seconds": None}
 
     def fit(self, parameters, config):
+        codec = validate_codec(config.get("uplink_codec", "none"))
         set_weights(self.model, parameters)
         server_round = int(config.get("round", 0))
         local_seed = (self.seed + 1000003 * server_round + self.client_id) % (2 ** 32)
@@ -53,10 +56,15 @@ class FedMedClient(fl.client.NumPyClient):
                 float(config.get("weight_decay", self.weight_decay)), self.device,
                 proximal_mu=mu)
         n = len(self.train_loader.dataset)
+        encode_started = time.perf_counter()
+        weights = encode_uplink(get_weights(self.model), codec)
+        encode_seconds = time.perf_counter() - encode_started
         record = {**self._base_record(config, "fit", "train", n),
                   "local_epochs": epochs, "proximal_mu": mu, "train_loss": loss,
+                  "uplink_codec": codec, "uplink_encode_seconds": encode_seconds,
                   "train_accuracy": accuracy, "resources": monitor.result}
-        return get_weights(self.model), n, {
+        return weights, n, {
+            "uplink_codec": codec,
             "client_id": self.client_id, "train_loss": loss, "train_acc": accuracy,
             "telemetry_json": json.dumps(record, allow_nan=False)}
 

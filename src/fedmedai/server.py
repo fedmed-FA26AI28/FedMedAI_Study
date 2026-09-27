@@ -2,12 +2,14 @@
 
 import json
 import time
+from dataclasses import replace
 
 import flwr as fl
 import numpy as np
 import torch
 from flwr.common import ndarrays_to_parameters, parameters_to_ndarrays
 
+from fedmedai.communication import decode_uplink
 from fedmedai.evaluate import evaluate_classification
 from fedmedai.experiment import MODEL_METRICS
 from fedmedai.model import get_weights, set_weights
@@ -27,6 +29,7 @@ class FedMedFedAvg(fl.server.strategy.FedAvg):
         self.artifacts, self.writer, self.device = artifacts, writer, device
         cfg = artifacts.config
         self.cfg = cfg
+        self.uplink_codec = cfg.get("communication", {}).get("uplink_codec", "none")
         self.num_classes = cfg["model"]["num_classes"]
         self.class_names = cfg["evaluation"]["class_names"]
         self.selection_metric = cfg["evaluation"]["selection_metric"]
@@ -52,6 +55,7 @@ class FedMedFedAvg(fl.server.strategy.FedAvg):
     def fit_config(self, server_round):
         training, algorithm = self.cfg["training"], self.cfg["algorithm"]
         return {"round": server_round, "local_epochs": training["local_epochs"],
+                "uplink_codec": self.uplink_codec,
                 "lr": training["learning_rate"], "weight_decay": training["weight_decay"],
                 "proximal_mu": algorithm["proximal_mu"] if algorithm["name"] == "fedprox" else 0.0}
 
@@ -62,6 +66,7 @@ class FedMedFedAvg(fl.server.strategy.FedAvg):
         instructions = super().configure_fit(server_round, parameters, client_manager)
         self.round_history[server_round] = {
             "round": server_round, "split": "val", "algorithm": self.cfg["algorithm"]["name"],
+            "uplink_codec": self.uplink_codec,
             "fit_clients": len(instructions),
             "fit_download_model_bytes": sum(model_payload_bytes(ins.parameters) for _, ins in instructions),
             "fit_upload_model_bytes": 0, "evaluate_download_model_bytes": 0,
@@ -101,8 +106,21 @@ class FedMedFedAvg(fl.server.strategy.FedAvg):
         records = self._client_records(server_round, results, "fit")
         self._check_results(server_round, "fit", results, failures)
         self.fit_records[server_round] = records
+        # Count the received serialized payload, including INT8 scale metadata,
+        # before replacing it with restored arrays for the standard aggregator.
+        upload_bytes = sum(model_payload_bytes(result.parameters) for _, result in results)
+        decode_started = time.perf_counter()
+        template = get_weights(self.global_model)
+        decoded_results = []
+        for (proxy, result), record in zip(results, records):
+            if (result.metrics.get("uplink_codec", "none") != self.uplink_codec
+                    or record.get("uplink_codec", "none") != self.uplink_codec):
+                raise ValueError("Client uplink codec differs from server configuration")
+            arrays = decode_uplink(parameters_to_ndarrays(result.parameters), template, self.uplink_codec)
+            decoded_results.append((proxy, replace(result, parameters=ndarrays_to_parameters(arrays))))
+        row["uplink_decode_seconds"] = time.perf_counter() - decode_started
         start = time.perf_counter()
-        parameters, metrics = super().aggregate_fit(server_round, results, failures)
+        parameters, metrics = super().aggregate_fit(server_round, decoded_results, failures)
         row["aggregation_seconds"] = time.perf_counter() - start
         if parameters is None:
             raise RuntimeError("Aggregation produced no parameters")
@@ -111,7 +129,7 @@ class FedMedFedAvg(fl.server.strategy.FedAvg):
             train_samples=n,
             client_train_loss=sum(r["train_loss"] * r["num_samples"] for r in records) / n,
             client_train_accuracy=sum(r["train_accuracy"] * r["num_samples"] for r in records) / n,
-            fit_upload_model_bytes=sum(model_payload_bytes(result.parameters) for _, result in results),
+            fit_upload_model_bytes=upload_bytes,
             fit_phase_seconds=time.perf_counter() - self.round_started,
         )
         times = [r["resources"]["duration_seconds"] for r in records]
@@ -203,6 +221,10 @@ class FedMedFedAvg(fl.server.strategy.FedAvg):
             "completed_rounds": self.completed_rounds, "best_round": self.best_round,
             "selection_split": "val", "selection_metric": self.selection_metric,
             "best_validation_metrics": self.best_validation,
+            "uplink_codec": self.uplink_codec,
+            "total_fit_upload_model_bytes": sum(r.get("fit_upload_model_bytes", 0) for r in rows),
+            "total_fit_download_model_bytes": sum(r.get("fit_download_model_bytes", 0) for r in rows),
+            "total_evaluate_download_model_bytes": sum(r.get("evaluate_download_model_bytes", 0) for r in rows),
             "total_model_payload_bytes": self.cumulative_bytes,
             "target_accuracy": self.cfg["evaluation"]["target_accuracy"],
             "rounds_to_target": self.target_reached["round"] if self.target_reached else None,

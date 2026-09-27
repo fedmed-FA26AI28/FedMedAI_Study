@@ -1,1 +1,47 @@
 FedMedAI_Implementation_Plan_v2.md
+
+# Generated experiment artifacts (keep local).
+/checkpoints/
+/results/
+/runs/
+events.out.tfevents.*
+
+# Model weights and serialized models, wherever they are saved.
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.bin
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+
+# Downloaded datasets and binary arrays.
+/data/
+/datasets/
+/.medmnist/
+*.npz
+*.npy
+
+# Compressed datasets and artifact bundles.
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.gz
+*.7z
+*.rar
+
+# Local Python environments, caches, and build outputs.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+/build/
+/dist/
+
+# Git ignore rules cannot filter by size; review new large file types before adding.

@@ -1,0 +1,133 @@
+{
+  "schema_version": 2,
+  "baseline_origin": "configs/config.yaml default ResNet-18 training settings with user-approved full data and 8 rounds; runtime fixed before outcomes",
+  "alphas": [
+    0.1,
+    0.3,
+    1.0
+  ],
+  "seed": 2026,
+  "proximal_mu": 0.01,
+  "baseline_config": {
+    "federation": {
+      "num_clients": 3,
+      "num_rounds": 8,
+      "partition_type": "dirichlet",
+      "dirichlet_alpha": 0.3,
+      "seed": 2026,
+      "min_train_samples": 10,
+      "min_val_samples": 1
+    },
+    "algorithm": {
+      "name": "fedavg",
+      "proximal_mu": 0.01
+    },
+    "communication": {
+      "uplink_codec": "none"
+    },
+    "model": {
+      "name": "resnet18",
+      "pretrained": false,
+      "num_classes": 8
+    },
+    "training": {
+      "batch_size": 32,
+      "local_epochs": 1,
+      "learning_rate": 0.0001,
+      "weight_decay": 0.01,
+      "centralized_epochs": 8
+    },
+    "dataset": {
+      "name": "BloodMNIST",
+      "image_size": 28,
+      "root": null,
+      "download": false,
+      "max_train_samples": null,
+      "max_val_samples": null,
+      "max_test_samples": null
+    },
+    "runtime": {
+      "backend": "sequential",
+      "deterministic": true,
+      "torch_num_threads": 8,
+      "client_cpus": 1,
+      "client_gpus": 0.0,
+      "ray_num_cpus": 1
+    },
+    "monitoring": {
+      "enabled": true,
+      "interval_seconds": 0.2,
+      "sensors": {}
+    },
+    "evaluation": {
+      "selection_metric": "f1_macro",
+      "target_accuracy": 0.8,
+      "max_failure_cases": 100,
+      "class_names": [
+        "basophil",
+        "eosinophil",
+        "erythroblast",
+        "immature granulocytes(myelocytes, metamyelocytes and promyelocytes)",
+        "lymphocyte",
+        "monocyte",
+        "neutrophil",
+        "platelet"
+      ]
+    },
+    "paths": {
+      "checkpoints_dir": "checkpoints/non_iid_study",
+      "results_dir": "results/non_iid_study",
+      "runs_dir": "runs/non_iid_study"
+    },
+    "hardware": {
+      "scenario": "pc_simulation",
+      "client_device_types": {}
+    }
+  },
+  "frozen_source_sha256": {
+    "__init__.py": "702ea1e0a71bb9ebbc02dc81892bfae03a722d5b1ff38205852743822391a907",
+    "centralized.py": "d24b686a583d24988e6515372eaf4be71e7de6a7b04cec86d5f1650dbd96282f",
+    "client.py": "ae6adf6197907e229b6325f6f135902a37924346d1a93a9a4597f2d02fa7c623",
+    "communication.py": "6710f8bfddacce1068e8eb5a00a78e34fd8ddb5cd270384235ec74eb6ef3c418",
+    "dataset.py": "88e152403b1837445ea78807e972333a1c456791b51653601181660ea7a4dbc1",
+    "evaluate.py": "cf8fe24a8ad9537f50ccb5918f84ed2336a9fded81f362d5923b39896b1ef80b",
+    "experiment.py": "9afbd766c898a09721336825ce0d7d3e905bd9300113faaa949abcb5a235e3f8",
+    "model.py": "6aa9bd2628ec06245a62ea1cb5dcd23781c926224dc3da68e6bc0fc9ebfe5c79",
+    "monitoring\\__init__.py": "67400b7bd26ab76df10ed0b2f9bf287514ffd6cbb4da4cf1eb18d320eff48933",
+    "monitoring\\metrics.py": "dd94b0e71d08e154db40476942b804864821423b6ff7426368153f3a5309c3b7",
+    "monitoring\\resource.py": "68cab66fbe9ae804bc2ec90ba9a00a93b0f35f5154a7248fbbc4abab903b3d8a",
+    "partition.py": "e2be83607e507277b055f1b1bee61077492b163935251ad7d5e2b96010db832c",
+    "runner.py": "e15b0a3554943c0d88c9856c14e1a5e0c2536e4318df169db6ed70b5bf60d97c",
+    "server.py": "2ba42425c0df4ab5e13bba55da27cd1717e0d9e5077f63e65b7ef6e155aa1af1",
+    "simulation.py": "7901d21f6008ef8deda292ecf05aa4ff7211c040b4190b9a521e965d75abc088",
+    "train.py": "cc620a784601210c016e9c6e4397dbc28588dde1e158279283e847ac0bac9171"
+  },
+  "preflight": {
+    "selection_basis": "training-batch feasibility and synthetic runtime only; no validation/test outcomes",
+    "train_counts": {
+      "0.1": [
+        4497,
+        7108,
+        354
+      ],
+      "0.3": [
+        4779,
+        3864,
+        3316
+      ],
+      "1.0": [
+        3158,
+        4002,
+        4799
+      ]
+    },
+    "batch_size": 32,
+    "timing_16_synthetic_batches_fedprox_seconds": {
+      "1": 7.7497416,
+      "2": 5.7442569,
+      "4": 4.4759611,
+      "8": 3.6631122
+    },
+    "chosen_threads": 8
+  }
+}

@@ -1,10 +1,10 @@
 ﻿# FedMedAI v2: lightweight 2D baseline and explicit evaluation protocol.
 federation:
   num_clients: 3
-  num_rounds: 5
-  partition_type: iid
+  num_rounds: 8
+  partition_type: dirichlet
   dirichlet_alpha: 0.3
-  seed: 42
+  seed: 2026
   min_train_samples: 10
   min_val_samples: 1
 
@@ -28,9 +28,9 @@ dataset:
   name: BloodMNIST             # DermaMNIST supported for secondary evaluation.
   image_size: 28
   root: null                  # MedMNIST default cache.
-  download: true
-  max_train_samples: 500       # Per client, quick development configuration.
-  max_val_samples: 100         # Set both caps to null for full research runs.
+  download: false              # Use the cached official dataset.
+  max_train_samples: null      # Full official training split.
+  max_val_samples: null        # Full official validation split.
   max_test_samples: null       # Official test; used once after model selection.
 
 evaluation:
@@ -39,9 +39,9 @@ evaluation:
   max_failure_cases: 100       # Bounded list of misclassified test sample IDs.
 
 runtime:
-  backend: flower             # flower (Ray) | sequential (debug only).
+  backend: sequential         # Same-host research simulation; Flower/Ray is optional.
   deterministic: true
-  torch_num_threads: 1
+  torch_num_threads: 8
   client_cpus: 1
   client_gpus: 0.0             # Set explicitly for CUDA worker allocation.
   ray_num_cpus: 1
@@ -57,7 +57,7 @@ hardware:
   client_device_types: {}      # Recorded labels; this does not emulate edge devices.
 
 paths:
-  checkpoints_dir: checkpoints
-  results_dir: results
-  runs_dir: runs
+  checkpoints_dir: checkpoints/non_iid_study
+  results_dir: results/non_iid_study
+  runs_dir: runs/non_iid_study
 
