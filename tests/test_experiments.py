@@ -14,17 +14,17 @@ import yaml
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, Subset, TensorDataset
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fedmedai.centralized import run_centralized
-from fedmedai.evaluate import evaluate_classification
-from fedmedai.experiment import RunArtifacts, load_config, seed_everything
-from fedmedai.model import get_weights, set_weights
-from fedmedai.monitoring.metrics import classification_metrics, client_fairness, straggler_metrics
-from fedmedai.monitoring.resource import ResourceMonitor
-from fedmedai.partition import create_client_dataloaders, partition_dirichlet_non_iid, partition_iid
-from fedmedai.simulation import run_federated_simulation
-from fedmedai.train import train_local
+from experiments.train_centralized import run_centralized
+from client.evaluate import evaluate_classification
+from experiments.artifacts import RunArtifacts, load_config, seed_everything
+from models.cnn import get_parameters, set_parameters
+from monitoring.metrics import classification_metrics, client_fairness, straggler_metrics
+from monitoring.resource import ResourceMonitor
+from datasets.partition import create_client_dataloaders, partition_dirichlet_non_iid, partition_iid
+from experiments.simulation import run_federated_simulation
+from client.train import train_local
 
 
 class SyntheticMedicalDataset(Dataset):
@@ -105,7 +105,7 @@ class TrainingPartitionTests(unittest.TestCase):
 
     def test_partitions_and_class_distributions_match_selected_samples(self):
         data = SyntheticMedicalDataset(240)
-        with patch("fedmedai.partition.load_medmnist_split", return_value=data):
+        with patch("datasets.partition.load_medmnist_split", return_value=data):
             train, val, metadata = create_client_dataloaders(
                 partition_type="dirichlet", alpha=0.3, max_train_samples=12, max_val_samples=8)
         for cid in train:
@@ -122,7 +122,7 @@ class TrainingPartitionTests(unittest.TestCase):
             seed_everything(7)
             model = nn.Linear(1, 2)
             train_local(model, loader, 2, 0.1, 0.0, torch.device("cpu"), proximal_mu=mu)
-            return get_weights(model)
+            return get_parameters(model)
         base, zero, prox = trained(0), trained(0), trained(10)
         for x, y in zip(base, zero):
             np.testing.assert_array_equal(x, y)
@@ -130,13 +130,13 @@ class TrainingPartitionTests(unittest.TestCase):
 
     def test_parameter_exchange_does_not_alias_model_or_accept_bad_shapes(self):
         model = nn.Linear(2, 2)
-        weights = get_weights(model)
+        weights = get_parameters(model)
         weights[0][:] = 100
         self.assertFalse(torch.all(model.weight == 100))
         with self.assertRaises(ValueError):
-            set_weights(model, weights[:-1])
+            set_parameters(model, weights[:-1])
         with self.assertRaises(ValueError):
-            set_weights(model, [np.zeros((3, 3)), weights[1]])
+            set_parameters(model, [np.zeros((3, 3)), weights[1]])
 
 
 class ExperimentTests(unittest.TestCase):
@@ -162,7 +162,7 @@ class ExperimentTests(unittest.TestCase):
         def load_fake(dataset_name="BloodMNIST", split="train", *args, **kwargs):
             self.calls.append(split)
             return SyntheticMedicalDataset(80 if split == "train" else 32, seed={"train": 0, "val": 1, "test": 2}[split])
-        for name in ("fedmedai.partition.load_medmnist_split", "fedmedai.dataset.load_medmnist_split"):
+        for name in ("datasets.partition.load_medmnist_split", "datasets.medmnist_code.load_medmnist_split"):
             patcher = patch(name, side_effect=load_fake)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -209,7 +209,7 @@ class ExperimentTests(unittest.TestCase):
         self.assertEqual(centralized["selection_split"], "val")
 
     def test_zero_accuracy_still_saves_first_checkpoint(self):
-        with patch("fedmedai.server.evaluate_classification") as evaluate:
+        with patch("algorithms.fedavg.evaluate_classification") as evaluate:
             report = classification_metrics(np.roll(np.eye(8, dtype=int), 1, axis=1))
             report["loss"] = 2.0
             evaluate.return_value = report
@@ -218,7 +218,7 @@ class ExperimentTests(unittest.TestCase):
         self.assertEqual(result["best_validation_metrics"]["accuracy"], 0)
 
     def test_failed_runs_are_marked_and_never_reuse_old_best(self):
-        with patch("fedmedai.simulation.prepare_data", side_effect=RuntimeError("bad partition")):
+        with patch("experiments.simulation.prepare_data", side_effect=RuntimeError("bad partition")):
             with self.assertRaisesRegex(RuntimeError, "bad partition"):
                 run_federated_simulation(str(self.config_path))
         manifests = list((self.root / "results").rglob("run_manifest.json"))

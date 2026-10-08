@@ -4,7 +4,7 @@ federation:
   num_rounds: 2
   seed: 42
 model:
-  name: resnet18
+  name: cnn                   # Only supported model.
   pretrained: false
 training:
   batch_size: 16

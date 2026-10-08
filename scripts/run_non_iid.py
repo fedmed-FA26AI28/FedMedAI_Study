@@ -1,4 +1,4 @@
-﻿"""Run Dirichlet ablations for alpha 0.1 / 0.3 / 1.0, or one positional alpha."""
+"""Run Dirichlet ablations for alpha 0.1 / 0.3 / 1.0, or one positional alpha."""
 
 import argparse
 import csv
@@ -7,14 +7,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fedmedai.experiment import load_config, write_json
-from fedmedai.simulation import run_federated_simulation
+from algorithms import STRATEGIES
+from experiments.artifacts import load_config, write_json
+from experiments.simulation import run_federated_simulation
 
 
 def run_all_non_iid_experiments(config_path=None, alphas=None, algorithm=None, seed=None, backend=None):
-    config_path = config_path or str(Path(__file__).resolve().parents[1] / "configs/config.yaml")
+    config_path = config_path or str(Path(__file__).resolve().parents[1] / "configs/experiment.yaml")
     config = load_config(config_path)
     comparison_dir = Path(config["paths"]["results_dir"]) / "comparisons" / (
         datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + "_" + uuid4().hex[:8])
@@ -42,8 +43,9 @@ def run_all_non_iid_experiments(config_path=None, alphas=None, algorithm=None, s
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("alpha", nargs="?", type=float)
-    parser.add_argument("--config", default=str(Path(__file__).resolve().parents[1] / "configs/config.yaml"))
-    parser.add_argument("--algorithm", choices=["fedavg", "fedprox"])
+    parser.add_argument("--config", default=str(Path(__file__).resolve().parents[1] / "configs/experiment.yaml"))
+    parser.add_argument("--algorithm", choices=sorted(
+        name for name, status in STRATEGIES.items() if status == "implemented"))
     parser.add_argument("--seed", type=int)
     parser.add_argument("--backend", choices=["flower", "sequential"])
     args = parser.parse_args()

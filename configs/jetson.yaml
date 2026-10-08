@@ -1,0 +1,13 @@
+# Hardware presets are deployment settings, not simulated benchmark evidence.
+profiles:
+  pc:
+    batch_size: 32
+    workers: 0
+  orin:
+    batch_size: 32
+    workers: 0
+  nano:
+    batch_size: 16
+    workers: 0
+# Add real hosts, ssh_user, data_dir and port (a listening service such as SSH 22).
+client_registry: []

@@ -15,14 +15,14 @@ from flwr.common import Code, FitRes, Status, ndarrays_to_parameters, parameters
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fedmedai.client import FedMedClient
-from fedmedai.communication import decode_uplink, encode_uplink
-from fedmedai.experiment import RunArtifacts, load_config
-from fedmedai.model import get_weights
-from fedmedai.server import FedMedFedAvg, model_payload_bytes
-from fedmedai.simulation import run_sequential
+from client.client import FedMedClient
+from algorithms.communication import decode_uplink, encode_uplink
+from experiments.artifacts import RunArtifacts, load_config
+from models.cnn import get_parameters
+from algorithms.fedavg import FedMedFedAvg, model_payload_bytes
+from experiments.simulation import run_sequential
 
 
 class UplinkCodecTests(unittest.TestCase):
@@ -133,7 +133,7 @@ class UplinkStrategyTests(unittest.TestCase):
         for codec in ("none", "fp16", "int8"):
             with self.subTest(codec=codec):
                 strategy, _, _ = self.strategy(codec)
-                template = get_weights(strategy.global_model)
+                template = get_parameters(strategy.global_model)
                 states = [[np.full_like(t, value) for t in template] for value in (0.1234, -0.5678)]
                 results = []
                 expected = []

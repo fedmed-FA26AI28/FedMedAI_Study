@@ -1,6 +1,6 @@
 FedMedAI_Implementation_Plan_v2.md
-AGENTS.md
-STATUS.md
+/AGENTS.md
+/STATUS.md
 # Local research workspace: completed, paused and future studies stay on disk.
 /research/
 /CLEANUP_PLAN.md
@@ -29,7 +29,7 @@ STATUS.md
 /tests/test_heterogeneous_strategy.py
 /tests/test_watch_completion.py
 /tests/test_windows_io_amendment.py
-
+/tests/*
 # Machine-specific configuration and credentials; templates remain public.
 /configs/local/
 .env
