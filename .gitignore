@@ -1,5 +1,44 @@
 FedMedAI_Implementation_Plan_v2.md
+AGENTS.md
+STATUS.md
+# Local research workspace: completed, paused and future studies stay on disk.
+/research/
+/CLEANUP_PLAN.md
+/FedMedAI_Implementation_Plan*.md
 
+# Study orchestration is separate from the deployable training pipeline.
+/configs/*study.yaml
+/configs/coverage_extension.yaml
+/experiments/*study*.py
+/experiments/coverage_extension*.py
+/experiments/iid/
+/experiments/noniid_*/
+/scripts/*_study.py
+/scripts/*bloodcnn*.py
+/scripts/*coverage*.py
+/scripts/keep_study_awake.py
+
+# Tests of private protocols/runners require the local research workspace.
+# Keep core algorithm, training, model, CLI and layout regression tests public.
+/tests/test_*study*.py
+/tests/test_non_iid_report.py
+/tests/test_coverage_supplement.py
+/tests/test_coverage_extension_design.py
+/tests/test_coverage_extension_final_report.py
+/tests/test_coverage_extension_post_analysis.py
+/tests/test_heterogeneous_strategy.py
+/tests/test_watch_completion.py
+/tests/test_windows_io_amendment.py
+
+# Machine-specific configuration and credentials; templates remain public.
+/configs/local/
+.env
+.env.*
+!.env.example
+/certs/
+*.key
+*.pem
+*.log
 # Generated experiment artifacts (keep local).
 /checkpoints/
 /results/
@@ -20,7 +59,6 @@ events.out.tfevents.*
 
 # Downloaded datasets and binary arrays.
 /data/
-/datasets/
 /.medmnist/
 *.npz
 *.npy
